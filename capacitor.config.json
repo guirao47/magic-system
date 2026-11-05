@@ -1,0 +1,48 @@
+{
+  "appId": "com.magia.panel",
+  "appName": "Panel Mago",
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://TU-APP.onrender.com",
+    "cleartext": false
+  },
+  "android": {
+    "buildOptions": {
+      "keystorePath": "release.keystore",
+      "keystoreAlias": "key",
+      "keystorePassword": "TU_PASSWORD",
+      "keyPassword": "TU_PASSWORD"
+    },
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "overrideUserAgent": "PanelMago/1.0",
+    "backgroundColor": "#0f0f1a",
+    "loggingBehavior": "none"
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "scrollEnabled": true,
+    "backgroundColor": "#0f0f1a"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1000,
+      "backgroundColor": "#0f0f1a",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "dark",
+      "backgroundColor": "#0f0f1a"
+    },
+    "Keyboard": {
+      "resize": "body",
+      "style": "dark",
+      "resizeOnFullScreen": true
+    },
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Cargando...</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23000'/></svg>">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #000000;
+      --text: #888888;
+      --text-dim: #444444;
+      --accent: #333333;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #ffffff;
+        --text: #999999;
+        --text-dim: #cccccc;
+        --accent: #eeeeee;
+      }
+    }
+    html, body { height: 100%; height: 100dvh; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      overflow: hidden;
+    }
+    .container { text-align: center; padding: 2rem; max-width: 320px; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 3px solid var(--accent);
+      border-top-color: var(--text);
+      border-radius: 50%;
+      margin: 0 auto 1.5rem;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .message { font-size: 1rem; font-weight: 500; letter-spacing: -0.01em; }
+    .subtext { font-size: 0.8rem; color: var(--text-dim); margin-top: 0.5rem; }
+    .error-state { display: none; }
+    .error-state.visible { display: block; }
+    .error-icon { font-size: 3rem; margin-bottom: 1rem; }
+    .retry-btn {
+      margin-top: 1.5rem;
+      padding: 0.75rem 2rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .retry-btn:hover { background: var(--accent); color: var(--bg); }
+    @media (prefers-reduced-motion: reduce) {
+      .spinner { animation: none; border-top-color: var(--accent); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="container">
+    <!-- Estado de carga normal -->
+    <div id="loadingState">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="message" id="message">Conectando...</div>
+      <div class="subtext" id="subtext">Esperando conexión...</div>
+    </div>
+
+    <!-- Estado de error -->
+    <div id="errorState" class="error-state">
+      <div class="error-icon">⚠️</div>
+      <div class="message" id="errorMessage">Sin conexión</div>
+      <div class="subtext" id="errorSubtext">No se pudo conectar al servidor</div>
+      <button class="retry-btn" id="retryBtn" type="button">Reintentar</button>
+    </div>
+  </div>
+
+  <!-- Socket.IO Client -->
+  <script src="/socket.io/socket.io.min.js"></script>
+  <script>
+    // ===== CONFIG =====
+    const MAX_RECONNECT_ATTEMPTS = 10;
+    const RECONNECT_DELAY = 2000;
+
+    // ===== STATE =====
+    let socket = null;
+    let sessionId = null;
+    let reconnectAttempts = 0;
+    let redirected = false;
+
+    // ===== DOM =====
+    const els = {
+      loadingState: document.getElementById('loadingState'),
+      errorState: document.getElementById('errorState'),
+      message: document.getElementById('message'),
+      subtext: document.getElementById('subtext'),
+      errorMessage: document.getElementById('errorMessage'),
+      errorSubtext: document.getElementById('errorSubtext'),
+      retryBtn: document.getElementById('retryBtn')
+    };
+
+    // ===== UTILS =====
+    function getSessionId() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('s') || params.get('sessionId');
+    }
+
+    function showLoading(msg = 'Conectando...', sub = 'Esperando instrucciones...') {
+      els.loadingState.style.display = 'block';
+      els.errorState.classList.remove('visible');
+      els.message.textContent = msg;
+      els.subtext.textContent = sub;
+    }
+
+    function showError(msg, sub, canRetry = true) {
+      els.loadingState.style.display = 'none';
+      els.errorState.classList.add('visible');
+      els.errorMessage.textContent = msg;
+      els.errorSubtext.textContent = sub;
+      els.retryBtn.style.display = canRetry ? 'block' : 'none';
+    }
+
+    // ===== CRÍTICO: REDIRECCIÓN LIMPIA CON REPLACE =====
+    function redirectClean(targetUrl, engine, query) {
+      if (redirected) return;
+      redirected = true;
+
+      console.log('🔮 REDIRECCIÓN MÁGICA:', { targetUrl, engine, query });
+
+      // CAMBIO CRÍTICO: Usar replace() en lugar de href= o assign()
+      // Esto REEMPLAZA la entrada actual en el historial
+      // El historial del navegador SOLO mostrará la URL final (Google, YouTube, etc.)
+      window.location.replace(targetUrl);
+    }
+
+    // ===== SOCKET =====
+    function connect() {
+      sessionId = getSessionId();
+
+      if (!sessionId) {
+        showError('URL inválida', 'Falta parámetro de sesión (?s=XXX)', false);
+        return;
+      }
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      const serverUrl = `${protocol}//${host}`;
+
+      console.log('Conectando viewer a:', serverUrl, 'Sesión:', sessionId);
+
+      showLoading('Conectando al servidor...', `Sesión: ${sessionId}`);
+
+      socket = io(serverUrl, {
+        transports: ['websocket', 'polling'],
+        query: { sessionId },
+        reconnection: false // Manejo manual
+      });
+
+      socket.on('connect', () => {
+        console.log('Viewer conectado:', socket.id);
+        reconnectAttempts = 0;
+        showLoading('Conectado ✓', 'Esperando la magia...');
+
+        // Unirse a la sesión
+        socket.emit('viewer-join', { sessionId });
+      });
+
+      socket.on('disconnect', (reason) => {
+        console.log('Viewer desconectado:', reason);
+        if (!redirected) handleDisconnect(reason);
+      });
+
+      socket.on('connect_error', (err) => {
+        console.error('Error conexión viewer:', err);
+        if (!redirected) handleConnectionError(err);
+      });
+
+      // ===== EVENTO CRÍTICO: REDIRECCIÓN =====
+      socket.on('redirect', (data) => {
+        const { url, engine, query } = data;
+        console.log('Recibido redirect:', data);
+
+        // Confirmar recepción (opcional)
+        socket.emit('viewer-redirected', { sessionId });
+
+        // Mostrar brevemente antes de redirigir
+        showLoading('Redirigiendo...', `Abriendo ${engine}: "${query}"`);
+
+        // Pequeño delay para feedback visual, luego redirect LIMPIO
+        setTimeout(() => redirectClean(url, engine, query), 100);
+      });
+
+      socket.on('viewer-joined', (data) => {
+        console.log('Viewer unido confirmado:', data);
+        showLoading('Listo', 'Espectador conectado ✓');
+      });
+    }
+
+    function handleDisconnect(reason) {
+      if (reason === 'io server disconnect') {
+        // Servidor nos desconectó, reintentar
+        scheduleReconnect('Servidor desconectado');
+      } else if (reason === 'io client disconnect') {
+        // Nosotros nos desconectamos, no reintentar
+        showError('Desconectado', 'Conexión cerrada');
+      } else {
+        // Error de red
+        scheduleReconnect('Conexión perdida');
+      }
+    }
+
+    function handleConnectionError(err) {
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        scheduleReconnect('Error de conexión');
+      } else {
+        showError('Sin conexión', 'No se pudo conectar tras varios intentos', true);
+      }
+    }
+
+    function scheduleReconnect(reason) {
+      reconnectAttempts++;
+      showLoading(`Reintentando (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, reason);
+
+      setTimeout(() => {
+        if (!redirected) connect();
+      }, RECONNECT_DELAY * Math.min(reconnectAttempts, 5));
+    }
+
+    // ===== EVENTOS =====
+    els.retryBtn.addEventListener('click', () => {
+      reconnectAttempts = 0;
+      connect();
+    });
+
+    // Prevenir que el botón "Atrás" del navegador vuelva a esta página
+    // (replace() ya lo maneja, pero por si acaso)
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted && !redirected) {
+        console.log('Página restaurada de bfcache, reconectando...');
+        reconnectAttempts = 0;
+        connect();
+      }
+    });
+
+    // Visibilidad de página
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !socket?.connected && !redirected) {
+        console.log('Página visible, reconectando...');
+        reconnectAttempts = 0;
+        connect();
+      }
+    });
+
+    // Online/Offline
+    window.addEventListener('online', () => {
+      if (!socket?.connected && !redirected) {
+        reconnectAttempts = 0;
+        connect();
+      }
+    });
+
+    // ===== INICIAR =====
+    connect();
+  </script>
+</body>
+</html>

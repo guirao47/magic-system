@@ -1,0 +1,27 @@
+# Render.com Blueprint - Despliegue gratis automático
+# 1. Conecta tu repo a Render
+# 2. Render detectará este archivo y creará el servicio automáticamente
+# 3. ¡Gratis para siempre con 750 horas/mes!
+
+services:
+  - type: web
+    name: magic-system
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    # Auto-deploy en cada push a main
+    autoDeploy: true
+
+# NOTAS IMPORTANTES:
+# - Render da 750 horas/mes gratis (suficiente para 24/7)
+# - El servicio "duerme" tras 15 min de inactividad (cold start ~30s)
+# - Para evitar cold start: usa cron-job.org o uptimerobot.com para ping cada 10 min
+# - WebSockets funcionan nativamente en Render
+# - SSL/HTTPS automático incluido

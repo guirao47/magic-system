@@ -1,0 +1,29 @@
+{
+  "name": "Panel del Mago",
+  "short_name": "Mago",
+  "description": "Panel de control para magia digital en tiempo real",
+  "start_url": "/magician",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f0f1a",
+  "theme_color": "#1a1a2e",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎩</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "entertainment"],
+  "shortcuts": [
+    {
+      "name": "Nueva Sesión",
+      "short_name": "Nueva",
+      "description": "Crear nueva sesión de magia",
+      "url": "/magician",
+      "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>", "sizes": "192x192" }]
+    }
+  ]
+}

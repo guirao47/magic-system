@@ -1,0 +1,29 @@
+{
+  "name": "magic-system",
+  "version": "1.0.0",
+  "description": "Sistema de magia digital - Panel del mago + Vista espectador en tiempo real",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "capacitor:build": "capacitor build android",
+    "capacitor:open": "capacitor open android",
+    "capacitor:sync": "capacitor sync android"
+  },
+  "keywords": ["magic", "realtime", "socket.io", "pwa", "capacitor"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^5.0.0",
+    "@capacitor/core": "^5.0.0",
+    "@capacitor/android": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
