@@ -10,18 +10,24 @@
     "capacitor:open": "capacitor open android",
     "capacitor:sync": "capacitor sync android"
   },
-  "keywords": ["magic", "realtime", "socket.io", "pwa", "capacitor"],
+  "keywords": [
+    "magic",
+    "realtime",
+    "socket.io",
+    "pwa",
+    "capacitor"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "cors": "^2.8.5"
+    "socket.io": "^4.7.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "^5.0.0",
-    "@capacitor/core": "^5.0.0",
-    "@capacitor/android": "^5.0.0"
+    "@capacitor/android": "^5.7.8",
+    "@capacitor/cli": "^5.7.8",
+    "@capacitor/core": "^5.7.8"
   },
   "engines": {
     "node": ">=18.0.0"

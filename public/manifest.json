@@ -2,7 +2,7 @@
   "name": "Panel del Mago",
   "short_name": "Mago",
   "description": "Panel de control para magia digital en tiempo real",
-  "start_url": "/magician",
+  "start_url": "/app",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#0f0f1a",
@@ -22,7 +22,7 @@
       "name": "Nueva Sesión",
       "short_name": "Nueva",
       "description": "Crear nueva sesión de magia",
-      "url": "/magician",
+      "url": "/app",
       "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>", "sizes": "192x192" }]
     }
   ]

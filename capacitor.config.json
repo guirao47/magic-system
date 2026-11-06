@@ -4,8 +4,8 @@
   "webDir": "public",
   "bundledWebRuntime": false,
   "server": {
-    "url": "https://TU-APP.onrender.com",
-    "cleartext": false
+    "url": "https://magic-system.onrender.com/app",
+    "androidScheme": "https"
   },
   "android": {
     "buildOptions": {

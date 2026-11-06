@@ -1,7 +1,9 @@
 /**
- * Servidor Backend - Magic System
- * Node.js + Express + Socket.io
- * Despliegue gratis en Render, Railway, Fly.io, etc.
+ * Servidor Backend - Magic System (Simplificado Radical)
+ * Arquitectura: URL raíz única, sesión global única
+ * - /              → Vista Espectador (única página web)
+ * - /app           → Panel Mago (APK)
+ * - Socket.io      → Canal global único (broadcast directo)
  */
 
 const express = require('express');
@@ -14,125 +16,74 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true
-  },
+  cors: { origin: "*", methods: ["GET", "POST"], credentials: true },
   transports: ['websocket', 'polling']
 });
 
 app.use(cors());
 app.use(express.json());
 
-// ===== RUTAS API =====
-const sessions = new Map();
+// Estado global único (sin sesiones, sin IDs)
+let viewerConnected = false;
+let viewerSocketId = null;
+let magicianConnected = false;
 
-function generateSessionId() {
-  return Math.random().toString(36).substring(2, 10).toUpperCase();
-}
+// ===== RUTAS API MÍNIMAS =====
+app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-app.post('/api/session', (req, res) => {
-  const sessionId = generateSessionId();
-  sessions.set(sessionId, {
-    viewerSocket: null,
-    magicianSocket: null,
-    createdAt: Date.now(),
-    status: 'waiting'
-  });
-  const oneHourAgo = Date.now() - 3600000;
-  for (const [id, session] of sessions.entries()) {
-    if (session.createdAt < oneHourAgo) sessions.delete(id);
-  }
-  res.json({ sessionId, url: `/v/${sessionId}` });
-});
-
-app.get('/api/session/:sessionId', (req, res) => {
-  const session = sessions.get(req.params.sessionId);
-  if (!session) return res.status(404).json({ error: 'Sesión no encontrada' });
-  res.json({
-    sessionId: req.params.sessionId,
-    hasViewer: !!session.viewerSocket,
-    hasMagician: !!session.magicianSocket,
-    status: session.status
-  });
-});
-
-app.get('/api/sessions', (req, res) => {
-  const active = [];
-  for (const [id, session] of sessions.entries()) {
-    if (session.viewerSocket) active.push({ sessionId: id, createdAt: session.createdAt });
-  }
-  res.json({ sessions: active });
-});
+app.get('/api/status', (req, res) => res.json({
+  viewerConnected,
+  magicianConnected
+}));
 
 // ===== RUTAS HTML (ANTES del static) =====
-app.get('/v/:sessionId', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
-});
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'magician.html'));
-});
-app.get('/magician', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'magician.html'));
-});
+// Raíz única → Vista Espectador (página web pública)
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'viewer.html')));
 
-// ===== STATIC AL FINAL (no captura rutas de arriba) =====
+// Panel Mago (APK) - ruta exclusiva para la app instalada
+app.get('/app', (req, res) => res.sendFile(path.join(__dirname, 'public', 'magician.html')));
+
+// Legacy redirects
+app.get('/magician', (req, res) => res.redirect('/app'));
+
+// ===== STATIC AL FINAL =====
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ===== SOCKET.IO =====
+// ===== SOCKET.IO - CANAL GLOBAL ÚNICO =====
 io.on('connection', (socket) => {
-  console.log(`Cliente conectado: ${socket.id}`);
+  console.log(`🔌 Cliente conectado: ${socket.id}`);
 
-  socket.on('viewer-join', (data) => {
-    const { sessionId } = data;
-    let session = sessions.get(sessionId);
-    if (!session) {
-      session = { viewerSocket: null, magicianSocket: null, createdAt: Date.now(), status: 'waiting' };
-      sessions.set(sessionId, session);
+  // Espectador se une (único)
+  socket.on('viewer-join', () => {
+    if (viewerConnected) {
+      // Solo un espectador a la vez
+      socket.emit('error', { message: 'Ya hay un espectador conectado' });
+      return;
     }
-    session.viewerSocket = socket.id;
-    session.status = 'viewer_connected';
-    socket.join(`session-${sessionId}`);
-    socket.emit('viewer-joined', { sessionId, status: 'connected' });
-    io.emit('viewer-waiting', { sessionId });
+    viewerConnected = true;
+    viewerSocketId = socket.id;
+    socket.join('viewer');
+    console.log('👁️ Espectador conectado');
+    socket.emit('viewer-joined', { status: 'connected' });
+    // Notificar al mago que hay espectador listo
+    io.to('magician').emit('viewer-ready', { status: 'waiting' });
   });
 
+  // Mago se une
   socket.on('magician-join', () => {
-    socket.join('magicians');
-    const activeSessions = [];
-    for (const [id, session] of sessions.entries()) {
-      if (session.viewerSocket) activeSessions.push({ sessionId: id, createdAt: session.createdAt });
-    }
-    socket.emit('magician-joined', { sessions: activeSessions });
+    magicianConnected = true;
+    socket.join('magician');
+    console.log('🎩 Mago conectado');
+    socket.emit('magician-joined', {
+      viewerReady: viewerConnected
+    });
   });
 
-  socket.on('magician-select-session', (data) => {
-    const { sessionId } = data;
-    const session = sessions.get(sessionId);
-    if (!session || !session.viewerSocket) {
-      socket.emit('error', { message: 'Sesión no encontrada o viewer no conectado' });
-      return;
-    }
-    session.magicianSocket = socket.id;
-    session.status = 'magician_connected';
-    socket.join(`session-${sessionId}`);
-    socket.emit('session-selected', { sessionId });
-  });
-
+  // Mago envía búsqueda (broadcast directo al espectador único)
   socket.on('search-command', (data) => {
-    const { sessionId, engine, query } = data;
-    const session = sessions.get(sessionId);
-    if (!session || session.magicianSocket !== socket.id) {
-      socket.emit('error', { message: 'No autorizado para esta sesión' });
-      return;
-    }
-    if (!session.viewerSocket) {
-      socket.emit('error', { message: 'Viewer no conectado' });
+    const { engine, query } = data;
+    if (!viewerConnected || !viewerSocketId) {
+      socket.emit('error', { message: 'No hay espectador conectado' });
       return;
     }
     const encodedQuery = encodeURIComponent(query.trim());
@@ -144,25 +95,22 @@ io.on('connection', (socket) => {
       images: `https://www.google.com/search?tbm=isch&q=${encodedQuery}`
     };
     const targetUrl = engines[engine] || engines.google;
-    io.to(`session-${sessionId}`).emit('redirect', { url: targetUrl, engine, query });
-    socket.emit('search-sent', { sessionId, engine, query, targetUrl });
+    console.log(`🔮 Redirect: ${engine} → ${targetUrl}`);
+    // Enviar directo al espectador único
+    io.to(viewerSocketId).emit('redirect', { url: targetUrl, engine, query });
+    socket.emit('search-sent', { engine, query, targetUrl });
   });
 
-  socket.on('viewer-redirected', (data) => console.log(`Viewer redirigido: ${data.sessionId}`));
-
   socket.on('disconnect', (reason) => {
-    for (const [sessionId, session] of sessions.entries()) {
-      if (session.viewerSocket === socket.id) {
-        session.viewerSocket = null;
-        session.status = 'viewer_disconnected';
-        io.to('magicians').emit('viewer-disconnected', { sessionId });
-        break;
-      }
-      if (session.magicianSocket === socket.id) {
-        session.magicianSocket = null;
-        session.status = session.viewerSocket ? 'viewer_connected' : 'waiting';
-        break;
-      }
+    if (socket.id === viewerSocketId) {
+      viewerConnected = false;
+      viewerSocketId = null;
+      console.log('👁️ Espectador desconectado');
+      io.to('magician').emit('viewer-disconnected', { reason });
+    }
+    if (magicianConnected) {
+      magicianConnected = false;
+      console.log('🎩 Mago desconectado');
     }
   });
 });
@@ -170,9 +118,9 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Servidor puerto ${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/health`);
-  console.log(`   Mago:   http://localhost:${PORT}/magician`);
-  console.log(`   Viewer: http://localhost:${PORT}/v/SESSION_ID`);
+  console.log(`   Health:     http://localhost:${PORT}/health`);
+  console.log(`   Espectador: http://localhost:${PORT}/  (URL raíz pública)`);
+  console.log(`   Panel Mago: http://localhost:${PORT}/app (APK)`);
 });
 
 module.exports = { app, server, io };

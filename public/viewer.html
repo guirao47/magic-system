@@ -75,7 +75,7 @@
     <div id="loadingState">
       <div class="spinner" aria-hidden="true"></div>
       <div class="message" id="message">Conectando...</div>
-      <div class="subtext" id="subtext">Esperando conexión...</div>
+      <div class="subtext" id="subtext">Esperando señal...</div>
     </div>
 
     <!-- Estado de error -->
@@ -96,7 +96,6 @@
 
     // ===== STATE =====
     let socket = null;
-    let sessionId = null;
     let reconnectAttempts = 0;
     let redirected = false;
 
@@ -112,12 +111,7 @@
     };
 
     // ===== UTILS =====
-    function getSessionId() {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('s') || params.get('sessionId');
-    }
-
-    function showLoading(msg = 'Conectando...', sub = 'Esperando instrucciones...') {
+    function showLoading(msg = 'Conectando...', sub = 'Esperando señal...') {
       els.loadingState.style.display = 'block';
       els.errorState.classList.remove('visible');
       els.message.textContent = msg;
@@ -147,43 +141,35 @@
 
     // ===== SOCKET =====
     function connect() {
-      sessionId = getSessionId();
-
-      if (!sessionId) {
-        showError('URL inválida', 'Falta parámetro de sesión (?s=XXX)', false);
-        return;
-      }
-
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
       const serverUrl = `${protocol}//${host}`;
 
-      console.log('Conectando viewer a:', serverUrl, 'Sesión:', sessionId);
+      console.log('Conectando espectador a:', serverUrl);
 
-      showLoading('Conectando al servidor...', `Sesión: ${sessionId}`);
+      showLoading('Conectando al servidor...', 'Esperando señal del mago...');
 
       socket = io(serverUrl, {
         transports: ['websocket', 'polling'],
-        query: { sessionId },
         reconnection: false // Manejo manual
       });
 
       socket.on('connect', () => {
-        console.log('Viewer conectado:', socket.id);
+        console.log('Espectador conectado:', socket.id);
         reconnectAttempts = 0;
         showLoading('Conectado ✓', 'Esperando la magia...');
 
-        // Unirse a la sesión
-        socket.emit('viewer-join', { sessionId });
+        // Unirse como espectador (sin sessionId, canal global único)
+        socket.emit('viewer-join');
       });
 
       socket.on('disconnect', (reason) => {
-        console.log('Viewer desconectado:', reason);
+        console.log('Espectador desconectado:', reason);
         if (!redirected) handleDisconnect(reason);
       });
 
       socket.on('connect_error', (err) => {
-        console.error('Error conexión viewer:', err);
+        console.error('Error conexión espectador:', err);
         if (!redirected) handleConnectionError(err);
       });
 
@@ -191,9 +177,6 @@
       socket.on('redirect', (data) => {
         const { url, engine, query } = data;
         console.log('Recibido redirect:', data);
-
-        // Confirmar recepción (opcional)
-        socket.emit('viewer-redirected', { sessionId });
 
         // Mostrar brevemente antes de redirigir
         showLoading('Redirigiendo...', `Abriendo ${engine}: "${query}"`);
@@ -203,7 +186,7 @@
       });
 
       socket.on('viewer-joined', (data) => {
-        console.log('Viewer unido confirmado:', data);
+        console.log('Espectador unido confirmado:', data);
         showLoading('Listo', 'Espectador conectado ✓');
       });
     }
